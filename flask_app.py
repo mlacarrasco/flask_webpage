@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 from datetime import datetime
-import json
 import threading
 import time
 import logging
