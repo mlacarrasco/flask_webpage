@@ -158,7 +158,7 @@ def get_history():
 # Add this route to your Flask app
 @app.route('/')
 def index():
-    return render_template('monitor.html')
+    return render_template('templates/monitor.html')
 
 @socketio.on('connect')
 def handle_connect():
