@@ -22,6 +22,7 @@ class AlarmProcessor:
         self.latest_data = None
         self.is_running = False
         self.processing_thread = None
+        self.threshold = 60.0  # Set threshold for alarma.X
 
     def start_processing(self):
         if not self.is_running:
@@ -38,34 +39,45 @@ class AlarmProcessor:
         while self.is_running:
             if self.latest_data:
                 try:
-                    # Process the alarm data
                     processed = self.process_alarm_data(self.latest_data)
-                    # Emit processed data through WebSocket
                     socketio.emit('processed_data', processed)
-                    # Store processed data
                     processed_data[processed['timestamp']] = processed
+                    logger.info(f"Processed alarm data: {processed}")
                 except Exception as e:
                     logger.error(f"Error processing data: {str(e)}")
-            time.sleep(1)  # Process every second
+            time.sleep(1)
 
     def process_alarm_data(self, data):
         """Process alarm data and add additional information"""
         try:
+            # Extract the alarma.X value
+            alarm_value = data.get('evaluation', {}).get('last_values', {}).get('alarma.X')
+            
             processed = {
                 'timestamp': datetime.now().isoformat(),
+                'device_id': data.get('origin', {}).get('id', 'unknown'),
+                'alarm_name': data.get('name', ''),
                 'alarm_rule': data.get('alarm', {}).get('rule'),
                 'activation_time': data.get('activation', {}).get('completed'),
+                'created_time': data.get('created'),
+                'modified_time': data.get('modified'),
                 'detections': data.get('activation', {}).get('detections'),
-                'alarm_value': data.get('evaluation', {}).get('last_values', {}).get('alarma.X'),
+                'alarm_value': alarm_value,
                 'instance': data.get('instance'),
                 'severity': data.get('severity'),
-                'status': 'active' if data.get('state') == 1 else 'inactive'
+                'state': data.get('state'),
+                'status': 'active' if data.get('state') == 1 else 'inactive',
+                'source': data.get('origin', {}).get('source'),
             }
             
-            # Add additional processing logic here
-            if processed['alarm_value'] is not None:
-                processed['threshold_exceeded'] = processed['alarm_value'] > 70
-                
+            # Add threshold analysis
+            if alarm_value is not None:
+                processed.update({
+                    'threshold_exceeded': alarm_value > self.threshold,
+                    'threshold_value': self.threshold,
+                    'threshold_difference': alarm_value - self.threshold
+                })
+            
             return processed
         except Exception as e:
             logger.error(f"Error in process_alarm_data: {str(e)}")
@@ -77,7 +89,11 @@ alarm_processor = AlarmProcessor()
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'processor_running': alarm_processor.is_running
+    })
 
 @app.route('/process', methods=['POST'])
 def process_json():
@@ -87,6 +103,12 @@ def process_json():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
+        # Validate required fields
+        required_fields = ['activation', 'alarm', 'evaluation']
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            return jsonify({'error': f'Missing required fields: {missing_fields}'}), 400
+
         # Update latest data for processing
         alarm_processor.latest_data = data
 
@@ -95,7 +117,8 @@ def process_json():
         
         return jsonify({
             'status': 'success',
-            'processed_data': processed
+            'processed_data': processed,
+            'original_data': data
         })
 
     except Exception as e:
@@ -106,20 +129,24 @@ def process_json():
 def get_history():
     """Endpoint to get processing history"""
     try:
-        # Optional query parameters for filtering
         start_time = request.args.get('start_time')
         end_time = request.args.get('end_time')
+        device_id = request.args.get('device_id')
         
         history = processed_data.copy()
         
+        # Apply filters
         if start_time:
             history = {k: v for k, v in history.items() if k >= start_time}
         if end_time:
             history = {k: v for k, v in history.items() if k <= end_time}
+        if device_id:
+            history = {k: v for k, v in history.items() if v.get('device_id') == device_id}
             
         return jsonify({
             'status': 'success',
-            'history': history
+            'history': history,
+            'total_records': len(history)
         })
     except Exception as e:
         logger.error(f"Error retrieving history: {str(e)}")
@@ -129,7 +156,10 @@ def get_history():
 def handle_connect():
     """Handle WebSocket connection"""
     logger.info('Client connected')
-    emit('connection_response', {'status': 'connected'})
+    emit('connection_response', {
+        'status': 'connected',
+        'timestamp': datetime.now().isoformat()
+    })
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -144,15 +174,16 @@ def start_server():
 if __name__ == '__main__':
     start_server()
 
-# Example usage with curl:
+# Example test with the provided JSON:
 """
 curl -X POST http://localhost:5000/process \
      -H "Content-Type: application/json" \
      -d '{
-       "activation":{"completed":1737044983949,"detections":1,"initiated":1737044983949},
+       "activation":{"completed":1737647372491,"detections":1,"initiated":1737647372491},
        "alarm":{"group":"","rule":"alarma_3","type":""},
-       "evaluation":{"last_completed":1737044983949,"last_values":{"alarma.X":73.9}},
-       "instance":"A3-2659422446",
+       "evaluation":{"last_completed":1737647372491,"last_values":{"alarma.X":60.3}},
+       "instance":"A3-243293886",
+       "origin":{"id":"Seed_XIAO_nRF52","name":"","source":"device"},
        "severity":2,
        "state":1
      }'
