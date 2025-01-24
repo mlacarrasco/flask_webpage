@@ -10,9 +10,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
-socketio = SocketIO(app, cors_allowed_origins="*")
+#app = Flask(__name__)
+#app.config['SECRET_KEY'] = 'your-secret-key'
+#socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Store for processed data
 processed_data = {}
