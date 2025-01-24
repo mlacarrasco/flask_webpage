@@ -156,7 +156,7 @@ def get_history():
 
 
 # Add this route to your Flask app
-@app.route('/')
+@app.route('/template')
 def index():
     return render_template('monitor.html')
 
