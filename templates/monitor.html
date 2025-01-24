@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Alarm Monitor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-2xl font-bold mb-6">Alarm Monitor</h1>
+        
+        <!-- Status Indicator -->
+        <div class="mb-4">
+            <p>Connection Status: <span id="connection-status" class="font-bold text-red-500">Disconnected</span></p>
+        </div>
+
+        <!-- Latest Alarm -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Latest Alarm</h2>
+            <div id="latest-alarm" class="space-y-2">
+                <p>Waiting for data...</p>
+            </div>
+        </div>
+
+        <!-- Alarm History -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Alarm History</h2>
+            <div id="alarm-history" class="space-y-4">
+                <!-- History items will be added here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Connect to WebSocket server
+        const socket = io();
+        const maxHistory = 10;  // Maximum number of history items to show
+
+        // Update connection status
+        socket.on('connect', () => {
+            document.getElementById('connection-status').textContent = 'Connected';
+            document.getElementById('connection-status').classList.remove('text-red-500');
+            document.getElementById('connection-status').classList.add('text-green-500');
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            document.getElementById('connection-status').classList.remove('text-green-500');
+            document.getElementById('connection-status').classList.add('text-red-500');
+        });
+
+        // Handle incoming alarm data
+        socket.on('processed_data', (data) => {
+            // Update latest alarm
+            updateLatestAlarm(data);
+            // Add to history
+            addToHistory(data);
+        });
+
+        function updateLatestAlarm(data) {
+            const alarmHtml = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p><strong>Device ID:</strong> ${data.device_id}</p>
+                        <p><strong>Alarm Rule:</strong> ${data.alarm_rule}</p>
+                        <p><strong>Alarm Value:</strong> ${data.alarm_value}</p>
+                        <p><strong>Status:</strong> <span class="${data.status === 'active' ? 'text-red-500' : 'text-green-500'}">${data.status}</span></p>
+                    </div>
+                    <div>
+                        <p><strong>Severity:</strong> ${data.severity}</p>
+                        <p><strong>Instance:</strong> ${data.instance}</p>
+                        <p><strong>Threshold Exceeded:</strong> ${data.threshold_exceeded ? 'Yes' : 'No'}</p>
+                        <p><strong>Time:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('latest-alarm').innerHTML = alarmHtml;
+        }
+
+        function addToHistory(data) {
+            const historyDiv = document.getElementById('alarm-history');
+            const historyItem = document.createElement('div');
+            historyItem.className = 'border-b pb-4';
+            historyItem.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="font-semibold">${data.alarm_rule}</p>
+                        <p class="text-sm text-gray-600">Device: ${data.device_id}</p>
+                        <p class="text-sm">Value: ${data.alarm_value} (${data.threshold_exceeded ? 'Above' : 'Below'} threshold)</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm text-gray-500">${new Date(data.timestamp).toLocaleString()}</p>
+                        <p class="text-sm ${data.status === 'active' ? 'text-red-500' : 'text-green-500'}">${data.status}</p>
+                    </div>
+                </div>
+            `;
+            
+            // Add new item at the top
+            historyDiv.insertBefore(historyItem, historyDiv.firstChild);
+            
+            // Remove excess history items
+            while (historyDiv.children.length > maxHistory) {
+                historyDiv.removeChild(historyDiv.lastChild);
+            }
+        }
+    </script>
+</body>
+</html>

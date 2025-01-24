@@ -4,6 +4,7 @@ from datetime import datetime
 import threading
 import time
 import logging
+from flask import render_template
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -151,6 +152,13 @@ def get_history():
     except Exception as e:
         logger.error(f"Error retrieving history: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+
+# Add this route to your Flask app
+@app.route('/')
+def index():
+    return render_template('monitor.html')
 
 @socketio.on('connect')
 def handle_connect():
