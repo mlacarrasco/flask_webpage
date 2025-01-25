@@ -100,39 +100,69 @@ class ProcessedAlarm:
         return base_data
 
 class AlarmHistory:
-    """Class to manage alarm history"""
-    def __init__(self, max_size: int = 100):
-        self.history: Dict[str, Dict[str, Any]] = {}
+    def __init__(self, max_size=1000):
+        self.history = {}
         self.max_size = max_size
 
-    def add_alarm(self, processed_alarm: ProcessedAlarm):
-        """Add a processed alarm to history"""
-        data = processed_alarm.get_processed_data()
-        self.history[data['timestamp']] = data
+    def add_alarm(self, alarm_data):
+        """Add alarm to history"""
+        timestamp = datetime.now().isoformat()
+        self.history[timestamp] = alarm_data
         
         # Remove oldest entries if exceeding max size
         if len(self.history) > self.max_size:
-            oldest_key = min(self.history.keys())
-            del self.history[oldest_key]
+            oldest = sorted(self.history.keys())[0]
+            del self.history[oldest]
 
-    def get_history(self, start_time: Optional[str] = None, end_time: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    def get_history(self, start_time=None, end_time=None, device_id=None, 
+                   severity=None, status=None, limit=10):
         """Get filtered history"""
-        history = self.history.copy()
+        filtered_history = {}
         
-        if start_time:
-            history = {k: v for k, v in history.items() if k >= start_time}
-        if end_time:
-            history = {k: v for k, v in history.items() if k <= end_time}
-            
-        return history
+        # Apply filters
+        for timestamp, data in sorted(self.history.items(), reverse=True):
+            if start_time and timestamp < start_time:
+                continue
+            if end_time and timestamp > end_time:
+                continue
+            if device_id and data.get('device_id') != device_id:
+                continue
+            if severity and str(data.get('severity')) != str(severity):
+                continue
+            if status and data.get('status') != status:
+                continue
+                
+            filtered_history[timestamp] = data
+            if len(filtered_history) >= limit:
+                break
+                
+        return filtered_history
 
-    def clear_history(self):
-        """Clear all history"""
-        self.history.clear()
-
-    def get_latest(self) -> Optional[Dict[str, Any]]:
-        """Get the most recent alarm data"""
+    def get_statistics(self):
+        """Get statistical information about alarms"""
         if not self.history:
-            return None
-        latest_key = max(self.history.keys())
-        return self.history[latest_key]
+            return {}
+            
+        stats = {
+            'total_alarms': len(self.history),
+            'device_counts': {},
+            'severity_counts': {},
+            'status_counts': {},
+            'latest_timestamp': max(self.history.keys()),
+            'oldest_timestamp': min(self.history.keys())
+        }
+        
+        for data in self.history.values():
+            # Count by device
+            device = data.get('device_id', 'unknown')
+            stats['device_counts'][device] = stats['device_counts'].get(device, 0) + 1
+            
+            # Count by severity
+            severity = data.get('severity', 'unknown')
+            stats['severity_counts'][severity] = stats['severity_counts'].get(severity, 0) + 1
+            
+            # Count by status
+            status = data.get('status', 'unknown')
+            stats['status_counts'][status] = stats['status_counts'].get(status, 0) + 1
+        
+        return stats

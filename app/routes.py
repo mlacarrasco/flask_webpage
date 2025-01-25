@@ -53,19 +53,38 @@ def process_json():
 
 @app.route('/history', methods=['GET'])
 def get_history():
-    """Endpoint to get processing history"""
+    """Endpoint to get processing history with filters"""
     try:
         # Get query parameters
         start_time = request.args.get('start_time')
         end_time = request.args.get('end_time')
-        
-        # Get history using the new AlarmHistory functionality
-        history = alarm_processor.get_history(start_time, end_time)
+        device_id = request.args.get('device_id')
+        severity = request.args.get('severity')
+        status = request.args.get('status')
+        limit = int(request.args.get('limit', 10))
+
+        # Get filtered history
+        history = alarm_processor.get_history(
+            start_time=start_time,
+            end_time=end_time,
+            device_id=device_id,
+            severity=severity,
+            status=status,
+            limit=limit
+        )
         
         return jsonify({
             'status': 'success',
+            'count': len(history),
             'history': history,
-            'count': len(history)
+            'filters_applied': {
+                'start_time': start_time,
+                'end_time': end_time,
+                'device_id': device_id,
+                'severity': severity,
+                'status': status,
+                'limit': limit
+            }
         })
     except Exception as e:
         logger.error(f"Error retrieving history: {str(e)}")
