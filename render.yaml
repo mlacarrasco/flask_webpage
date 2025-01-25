@@ -4,7 +4,7 @@ services:
     name: flask-app
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app
+    startCommand: gunicorn --worker-class eventlet -w 1 wsgi:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
