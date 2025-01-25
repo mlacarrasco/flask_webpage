@@ -90,6 +90,20 @@ def get_history():
         logger.error(f"Error retrieving history: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# In your Flask route
+@app.route('/history/stats', methods=['GET'])
+def get_history_stats():
+    try:
+        stats = alarm_processor.alarm_history.get_statistics()
+        return jsonify({
+            'status': 'success',
+            'statistics': stats
+        })
+    except Exception as e:
+        logger.error(f"Error retrieving statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+    
+    
 @socketio.on('connect')
 def handle_connect():
     """Handle WebSocket connection"""
