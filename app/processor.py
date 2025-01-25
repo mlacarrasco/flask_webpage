@@ -9,7 +9,7 @@ class AlarmProcessor:
         self.latest_data = None
         self.is_running = False
         self.processing_thread = None
-        self.alarm_history = AlarmHistory(max_size=100)
+        self.alarm_history = AlarmHistory(max_size=1000)
 
     def start_processing(self):
         if not self.is_running:
@@ -28,54 +28,47 @@ class AlarmProcessor:
         while self.is_running:
             if self.latest_data:
                 try:
-                    # Process the alarm data
-                    processed_alarm = self.process_alarm_data(self.latest_data)
-                    
-                    # Add to history
-                    self.alarm_history.add_alarm(ProcessedAlarm(AlarmData(self.latest_data)))
-                    
-                    # Emit through WebSocket
-                    socketio.emit('processed_data', processed_alarm)
-                    
-                    # Clear latest_data to prevent reprocessing
-                    self.latest_data = None
-                    
+                    processed = self.process_alarm_data(self.latest_data)
+                    socketio.emit('processed_data', processed)
+                    self.alarm_history.add_alarm(processed)
                 except Exception as e:
                     logger.error(f"Error in continuous processing: {str(e)}")
             time.sleep(1)
 
     def process_alarm_data(self, data):
-        """Process alarm data using models"""
         try:
             processed = {
                 'timestamp': datetime.now().isoformat(),
                 'device_id': data.get('origin', {}).get('id', 'unknown'),
-                'alarm_rule': data.get('alarm', {}).get('rule', ''),
+                'alarm_rule': data.get('alarm', {}).get('rule'),
                 'activation_time': data.get('activation', {}).get('completed'),
                 'detections': data.get('activation', {}).get('detections'),
                 'alarm_value': data.get('evaluation', {}).get('last_values', {}).get('alarma.X'),
-                'instance': data.get('instance', ''),
-                'severity': data.get('severity', 0),
-                'status': 'active' if data.get('state') == 1 else 'inactive',
-                'source': data.get('origin', {}).get('source', '')
+                'instance': data.get('instance'),
+                'severity': data.get('severity'),
+                'status': 'active' if data.get('state') == 1 else 'inactive'
             }
-            
-            # Log the processed data
-            logger.info(f"Processed alarm data: {processed}")
-            
             return processed
-            
         except Exception as e:
             logger.error(f"Error processing alarm data: {str(e)}")
             raise
-        
-    def get_history(self, start_time=None, end_time=None):
-        """Get processed alarm history"""
-        return self.alarm_history.get_history(start_time, end_time)
+
+    def get_history(self, start_time=None, end_time=None, device_id=None, 
+                   severity=None, status=None, limit=10):
+        """Get filtered alarm history"""
+        try:
+            return self.alarm_history.get_history(
+                start_time=start_time,
+                end_time=end_time,
+                device_id=device_id,
+                severity=severity,
+                status=status,
+                limit=limit
+            )
+        except Exception as e:
+            logger.error(f"Error getting history: {str(e)}")
+            return {}
 
     def get_latest_alarm(self):
         """Get the most recent alarm"""
         return self.alarm_history.get_latest()
-
-# Create a global instance
-alarm_processor = AlarmProcessor()
