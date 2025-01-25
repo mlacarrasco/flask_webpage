@@ -9,15 +9,11 @@
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
-        <h1 class="text-2xl font-bold mb-6">Alarm Monitor</h1>
-        
-        <!-- Connection Details -->
-        <div class="mb-4 bg-white rounded-lg shadow p-4">
-            <p>Connection Status: <span id="connection-status" class="font-bold text-red-500">Disconnected</span></p>
-            <p>Server URL: <span id="server-url" class="text-gray-600"></span></p>
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h1 class="text-2xl font-bold mb-4">Alarm Monitor</h1>
+            <div id="connection-status" class="mb-4 p-2 rounded"></div>
         </div>
 
-        <!-- Latest Alarm -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
             <h2 class="text-xl font-semibold mb-4">Latest Alarm</h2>
             <div id="latest-alarm" class="space-y-2">
@@ -25,75 +21,82 @@
             </div>
         </div>
 
-        <!-- Alarm History -->
         <div class="bg-white rounded-lg shadow p-6">
             <h2 class="text-xl font-semibold mb-4">Alarm History</h2>
-            <div id="alarm-history" class="space-y-4">
-                <!-- History items will be added here -->
-            </div>
+            <div id="alarm-history" class="space-y-4"></div>
         </div>
     </div>
 
     <script>
-        // Get the current URL
-        const currentUrl = window.location.origin;
-        document.getElementById('server-url').textContent = currentUrl;
+        // Socket.IO connection with error handling and reconnection
+        function initializeSocket() {
+            const socketOptions = {
+                transports: ['websocket'],
+                upgrade: false,
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                timeout: 60000
+            };
 
-        // Configure Socket.IO for Render
-        const socket = io(currentUrl, {
-            path: '/socket.io',
-            transports: ['websocket'],
-            secure: true,
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000
-        });
+            // Get the current host
+            const host = window.location.host;
+            const protocol = window.location.protocol;
+            
+            // Create socket connection
+            const socket = io(`${protocol}//${host}`, socketOptions);
 
-        const maxHistory = 10;  // Maximum number of history items to show
+            // Update connection status display
+            function updateConnectionStatus(status, message) {
+                const statusDiv = document.getElementById('connection-status');
+                statusDiv.textContent = message;
+                
+                if (status === 'connected') {
+                    statusDiv.className = 'mb-4 p-2 rounded bg-green-100 text-green-700';
+                } else if (status === 'disconnected') {
+                    statusDiv.className = 'mb-4 p-2 rounded bg-red-100 text-red-700';
+                } else if (status === 'error') {
+                    statusDiv.className = 'mb-4 p-2 rounded bg-yellow-100 text-yellow-700';
+                }
+            }
 
-        // Connection event handlers
-        socket.on('connect', () => {
-            console.log('Connected to server');
-            document.getElementById('connection-status').textContent = 'Connected';
-            document.getElementById('connection-status').classList.remove('text-red-500');
-            document.getElementById('connection-status').classList.add('text-green-500');
-        });
+            // Socket event handlers
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                updateConnectionStatus('connected', 'Connected to server');
+            });
 
-        socket.on('connect_error', (error) => {
-            console.error('Connection error:', error);
-            document.getElementById('connection-status').textContent = 'Connection Error';
-            document.getElementById('connection-status').classList.remove('text-green-500');
-            document.getElementById('connection-status').classList.add('text-red-500');
-        });
+            socket.on('disconnect', () => {
+                console.log('Disconnected from server');
+                updateConnectionStatus('disconnected', 'Disconnected from server');
+            });
 
-        socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-            document.getElementById('connection-status').textContent = 'Disconnected';
-            document.getElementById('connection-status').classList.remove('text-green-500');
-            document.getElementById('connection-status').classList.add('text-red-500');
-        });
+            socket.on('connect_error', (error) => {
+                console.error('Connection error:', error);
+                updateConnectionStatus('error', `Connection error: ${error.message}`);
+            });
 
-        // Handle incoming alarm data
-        socket.on('processed_data', (data) => {
-            console.log('Received data:', data);
-            updateLatestAlarm(data);
-            addToHistory(data);
-        });
+            socket.on('processed_data', (data) => {
+                updateLatestAlarm(data);
+                addToHistory(data);
+            });
+
+            return socket;
+        }
 
         function updateLatestAlarm(data) {
             const alarmHtml = `
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <p class="mb-2"><strong>Device ID:</strong> <span class="text-blue-600">${data.device_id}</span></p>
-                        <p class="mb-2"><strong>Alarm Rule:</strong> ${data.alarm_rule}</p>
-                        <p class="mb-2"><strong>Alarm Value:</strong> <span class="${data.threshold_exceeded ? 'text-red-500' : 'text-green-500'}">${data.alarm_value}</span></p>
-                        <p class="mb-2"><strong>Status:</strong> <span class="${data.status === 'active' ? 'text-red-500' : 'text-green-500'} font-semibold">${data.status}</span></p>
+                        <p><strong>Device ID:</strong> ${data.device_id}</p>
+                        <p><strong>Alarm Rule:</strong> ${data.alarm_rule}</p>
+                        <p><strong>Alarm Value:</strong> ${data.alarm_value}</p>
+                        <p><strong>Status:</strong> <span class="${data.status === 'active' ? 'text-red-500' : 'text-green-500'}">${data.status}</span></p>
                     </div>
                     <div>
-                        <p class="mb-2"><strong>Severity:</strong> <span class="font-semibold">${data.severity}</span></p>
-                        <p class="mb-2"><strong>Instance:</strong> ${data.instance}</p>
-                        <p class="mb-2"><strong>Threshold:</strong> ${data.threshold_exceeded ? '⚠️ Exceeded' : '✅ Normal'}</p>
-                        <p class="mb-2"><strong>Time:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
+                        <p><strong>Severity:</strong> ${data.severity}</p>
+                        <p><strong>Instance:</strong> ${data.instance}</p>
+                        <p><strong>Time:</strong> ${new Date(data.timestamp).toLocaleString()}</p>
                     </div>
                 </div>
             `;
@@ -103,39 +106,32 @@
         function addToHistory(data) {
             const historyDiv = document.getElementById('alarm-history');
             const historyItem = document.createElement('div');
-            historyItem.className = 'border-b pb-4 hover:bg-gray-50 transition-colors duration-150';
+            historyItem.className = 'border-b pb-4';
             historyItem.innerHTML = `
                 <div class="flex justify-between items-start">
-                    <div class="flex-1">
-                        <p class="font-semibold text-gray-800">${data.alarm_rule}</p>
+                    <div>
+                        <p class="font-semibold">${data.alarm_rule}</p>
                         <p class="text-sm text-gray-600">Device: ${data.device_id}</p>
-                        <p class="text-sm">Value: ${data.alarm_value} 
-                            <span class="${data.threshold_exceeded ? 'text-red-500' : 'text-green-500'}">
-                                (${data.threshold_exceeded ? '↑ Above' : '↓ Below'} threshold)
-                            </span>
-                        </p>
+                        <p class="text-sm">Value: ${data.alarm_value}</p>
                     </div>
-                    <div class="text-right ml-4">
+                    <div class="text-right">
                         <p class="text-sm text-gray-500">${new Date(data.timestamp).toLocaleString()}</p>
-                        <p class="text-sm font-medium ${data.status === 'active' ? 'text-red-500' : 'text-green-500'}">
-                            ${data.status}
-                        </p>
+                        <p class="text-sm ${data.status === 'active' ? 'text-red-500' : 'text-green-500'}">${data.status}</p>
                     </div>
                 </div>
             `;
             
-            // Add new item at the top
             historyDiv.insertBefore(historyItem, historyDiv.firstChild);
             
-            // Remove excess history items
-            while (historyDiv.children.length > maxHistory) {
+            // Keep only last 10 items
+            while (historyDiv.children.length > 10) {
                 historyDiv.removeChild(historyDiv.lastChild);
             }
         }
 
-        // Initial connection status update
+        // Initialize socket when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('Connecting to:', currentUrl);
+            const socket = initializeSocket();
         });
     </script>
 </body>
