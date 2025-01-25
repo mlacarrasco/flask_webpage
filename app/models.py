@@ -114,6 +114,13 @@ class AlarmHistory:
             oldest = sorted(self.history.keys())[0]
             del self.history[oldest]
 
+    def get_latest(self):
+        """Get the most recent alarm"""
+        if not self.history:
+            return None
+        latest_timestamp = max(self.history.keys())
+        return self.history[latest_timestamp]
+
     def get_history(self, start_time=None, end_time=None, device_id=None, 
                    severity=None, status=None, limit=10):
         """Get filtered history"""
@@ -166,3 +173,7 @@ class AlarmHistory:
             stats['status_counts'][status] = stats['status_counts'].get(status, 0) + 1
         
         return stats
+
+    def clear_history(self):
+        """Clear all history"""
+        self.history.clear()
