@@ -16,19 +16,30 @@ class AlarmProcessor:
             self.is_running = True
             self.processing_thread = threading.Thread(target=self.process_data_continuously)
             self.processing_thread.start()
+            logger.info("Alarm processor started")
 
     def stop_processing(self):
         self.is_running = False
         if self.processing_thread:
             self.processing_thread.join()
+            logger.info("Alarm processor stopped")
 
     def process_data_continuously(self):
         while self.is_running:
             if self.latest_data:
                 try:
-                    processed = self.process_alarm_data(self.latest_data)
-                    socketio.emit('processed_data', processed)
-                    self.alarm_history.add_alarm(processed)
+                    # Process the alarm data
+                    processed_alarm = self.process_alarm_data(self.latest_data)
+                    
+                    # Add to history
+                    self.alarm_history.add_alarm(ProcessedAlarm(AlarmData(self.latest_data)))
+                    
+                    # Emit through WebSocket
+                    socketio.emit('processed_data', processed_alarm)
+                    
+                    # Clear latest_data to prevent reprocessing
+                    self.latest_data = None
+                    
                 except Exception as e:
                     logger.error(f"Error in continuous processing: {str(e)}")
             time.sleep(1)

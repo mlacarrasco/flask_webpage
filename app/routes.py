@@ -33,7 +33,10 @@ def process_json():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
+        # Update latest data for processing
         alarm_processor.latest_data = data
+
+        # Immediate processing
         processed = alarm_processor.process_alarm_data(data)
         
         return jsonify({
@@ -49,10 +52,17 @@ def process_json():
 def get_history():
     """Endpoint to get processing history"""
     try:
-        history = dict(list(alarm_processor.processed_data.items())[-10:])
+        # Get query parameters
+        start_time = request.args.get('start_time')
+        end_time = request.args.get('end_time')
+        
+        # Get history using the new AlarmHistory functionality
+        history = alarm_processor.get_history(start_time, end_time)
+        
         return jsonify({
             'status': 'success',
-            'history': history
+            'history': history,
+            'count': len(history)
         })
     except Exception as e:
         logger.error(f"Error retrieving history: {str(e)}")
@@ -63,6 +73,10 @@ def handle_connect():
     """Handle WebSocket connection"""
     try:
         logger.info('Client connected')
+        # Send the latest alarm data if available
+        latest = alarm_processor.get_latest_alarm()
+        if latest:
+            socketio.emit('processed_data', latest)
         socketio.emit('connection_response', {'status': 'connected'})
     except Exception as e:
         logger.error(f"Connection error: {str(e)}")
