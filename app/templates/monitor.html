@@ -9,11 +9,25 @@
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
+        <!-- Debug Information -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
-            <h1 class="text-2xl font-bold mb-4">Alarm Monitor</h1>
-            <div id="connection-status" class="mb-4 p-2 rounded"></div>
+            <h2 class="text-xl font-semibold mb-4">Connection Status</h2>
+            <div id="debug-info" class="text-sm font-mono bg-gray-100 p-4 rounded">
+                <p>Server URL: <span id="server-url" class="text-blue-600"></span></p>
+                <p>Status: <span id="connection-status" class="font-bold text-red-500">Disconnected</span></p>
+                <p>Last Event: <span id="last-event" class="text-gray-600">None</span></p>
+            </div>
         </div>
 
+        <!-- Manual Test Section -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test Data</h2>
+            <button onclick="sendTestRequest()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Send Test Data
+            </button>
+        </div>
+
+        <!-- Latest Alarm -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
             <h2 class="text-xl font-semibold mb-4">Latest Alarm</h2>
             <div id="latest-alarm" class="space-y-2">
@@ -21,67 +35,84 @@
             </div>
         </div>
 
+        <!-- Alarm History -->
         <div class="bg-white rounded-lg shadow p-6">
             <h2 class="text-xl font-semibold mb-4">Alarm History</h2>
-            <div id="alarm-history" class="space-y-4"></div>
+            <div id="alarm-history" class="space-y-4">
+                <!-- History items will be added here -->
+            </div>
         </div>
     </div>
 
     <script>
-        // Socket.IO connection with error handling and reconnection
+        let socket;
+        const currentUrl = window.location.origin;
+        document.getElementById('server-url').textContent = currentUrl;
+
+        function updateDebugInfo(event, details) {
+            document.getElementById('last-event').textContent = `${event}: ${details} (${new Date().toLocaleString()})`;
+            console.log(`[${event}]`, details);
+        }
+
         function initializeSocket() {
-            const socketOptions = {
+            updateDebugInfo('Init', 'Starting socket connection...');
+
+            socket = io(currentUrl, {
                 transports: ['websocket'],
                 upgrade: false,
                 reconnection: true,
                 reconnectionAttempts: 5,
                 reconnectionDelay: 1000,
                 timeout: 60000
-            };
+            });
 
-            // Get the current host
-            const host = window.location.host;
-            const protocol = window.location.protocol;
-            
-            // Create socket connection
-            const socket = io(`${protocol}//${host}`, socketOptions);
-
-            // Update connection status display
-            function updateConnectionStatus(status, message) {
-                const statusDiv = document.getElementById('connection-status');
-                statusDiv.textContent = message;
-                
-                if (status === 'connected') {
-                    statusDiv.className = 'mb-4 p-2 rounded bg-green-100 text-green-700';
-                } else if (status === 'disconnected') {
-                    statusDiv.className = 'mb-4 p-2 rounded bg-red-100 text-red-700';
-                } else if (status === 'error') {
-                    statusDiv.className = 'mb-4 p-2 rounded bg-yellow-100 text-yellow-700';
-                }
-            }
-
-            // Socket event handlers
             socket.on('connect', () => {
-                console.log('Connected to server');
-                updateConnectionStatus('connected', 'Connected to server');
+                document.getElementById('connection-status').textContent = 'Connected';
+                document.getElementById('connection-status').className = 'font-bold text-green-500';
+                updateDebugInfo('Connect', 'Socket connected successfully');
             });
 
             socket.on('disconnect', () => {
-                console.log('Disconnected from server');
-                updateConnectionStatus('disconnected', 'Disconnected from server');
+                document.getElementById('connection-status').textContent = 'Disconnected';
+                document.getElementById('connection-status').className = 'font-bold text-red-500';
+                updateDebugInfo('Disconnect', 'Socket disconnected');
             });
 
             socket.on('connect_error', (error) => {
-                console.error('Connection error:', error);
-                updateConnectionStatus('error', `Connection error: ${error.message}`);
+                updateDebugInfo('Error', `Connection error: ${error.message}`);
             });
 
             socket.on('processed_data', (data) => {
+                updateDebugInfo('Data Received', JSON.stringify(data).substring(0, 100) + '...');
                 updateLatestAlarm(data);
                 addToHistory(data);
             });
+        }
 
-            return socket;
+        function sendTestRequest() {
+            updateDebugInfo('Test', 'Sending test request...');
+            fetch(`${currentUrl}/process`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    "activation": {"completed": Date.now(), "detections": 1, "initiated": Date.now()},
+                    "alarm": {"group": "", "rule": "test_alarm", "type": ""},
+                    "evaluation": {"last_completed": Date.now(), "last_values": {"alarma.X": 75.5}},
+                    "instance": "TEST-123",
+                    "origin": {"id": "TEST_DEVICE", "name": "", "source": "device"},
+                    "severity": 2,
+                    "state": 1
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateDebugInfo('Test Response', JSON.stringify(data).substring(0, 100) + '...');
+            })
+            .catch(error => {
+                updateDebugInfo('Test Error', error.message);
+            });
         }
 
         function updateLatestAlarm(data) {
@@ -101,6 +132,7 @@
                 </div>
             `;
             document.getElementById('latest-alarm').innerHTML = alarmHtml;
+            updateDebugInfo('Update', 'Latest alarm updated');
         }
 
         function addToHistory(data) {
@@ -123,15 +155,16 @@
             
             historyDiv.insertBefore(historyItem, historyDiv.firstChild);
             
-            // Keep only last 10 items
             while (historyDiv.children.length > 10) {
                 historyDiv.removeChild(historyDiv.lastChild);
             }
+            updateDebugInfo('History', 'Added new item to history');
         }
 
-        // Initialize socket when page loads
+        // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            const socket = initializeSocket();
+            initializeSocket();
+            updateDebugInfo('Load', 'Page loaded');
         });
     </script>
 </body>
