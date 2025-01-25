@@ -33,11 +33,14 @@ def process_json():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        # Update latest data for processing
-        alarm_processor.latest_data = data
-
-        # Immediate processing
+        # Process the data
         processed = alarm_processor.process_alarm_data(data)
+        
+        # Emit to all connected clients
+        socketio.emit('processed_data', processed, namespace='/')
+        
+        # Log the emission
+        logger.info(f"Emitted processed data: {processed}")
         
         return jsonify({
             'status': 'success',

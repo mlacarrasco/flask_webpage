@@ -47,17 +47,28 @@ class AlarmProcessor:
     def process_alarm_data(self, data):
         """Process alarm data using models"""
         try:
-            # Create AlarmData instance for validation and structuring
-            alarm_data = AlarmData(data)
+            processed = {
+                'timestamp': datetime.now().isoformat(),
+                'device_id': data.get('origin', {}).get('id', 'unknown'),
+                'alarm_rule': data.get('alarm', {}).get('rule', ''),
+                'activation_time': data.get('activation', {}).get('completed'),
+                'detections': data.get('activation', {}).get('detections'),
+                'alarm_value': data.get('evaluation', {}).get('last_values', {}).get('alarma.X'),
+                'instance': data.get('instance', ''),
+                'severity': data.get('severity', 0),
+                'status': 'active' if data.get('state') == 1 else 'inactive',
+                'source': data.get('origin', {}).get('source', '')
+            }
             
-            # Create ProcessedAlarm instance for additional processing
-            processed_alarm = ProcessedAlarm(alarm_data)
+            # Log the processed data
+            logger.info(f"Processed alarm data: {processed}")
             
-            return processed_alarm.get_processed_data()
+            return processed
+            
         except Exception as e:
             logger.error(f"Error processing alarm data: {str(e)}")
             raise
-
+        
     def get_history(self, start_time=None, end_time=None):
         """Get processed alarm history"""
         return self.alarm_history.get_history(start_time, end_time)
